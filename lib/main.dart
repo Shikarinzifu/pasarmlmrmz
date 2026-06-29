@@ -22,11 +22,15 @@ void main() async {
   await NotificationService.initialize();
   await GlobalInstitutePayService().init();
 
+  // Inisialisasi AuthProvider dan restore token dari secure storage
+  final authProvider = AuthProvider();
+  await authProvider.init();
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider.value(value: authProvider),
         ChangeNotifierProvider(create: (_) => ProductProvider()),
         ChangeNotifierProvider(create: (_) => CartProvider()),
         ChangeNotifierProvider(create: (_) => OrderProvider()),
