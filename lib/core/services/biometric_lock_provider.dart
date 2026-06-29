@@ -18,7 +18,8 @@ class BiometricLockProvider extends ChangeNotifier {
 
   /// Dipanggil satu kali saat app start — cek ketersediaan hardware.
   Future<void> initialize() async {
-    _isBiometricAvailable = await _service.isBiometricAvailable();
+    // Sementara disable untuk development (emulator tidak punya biometrik)
+    _isBiometricAvailable = false;
     notifyListeners();
   }
 
