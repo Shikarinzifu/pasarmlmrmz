@@ -14,106 +14,98 @@ class AuthProvider extends ChangeNotifier {
 
   // ─── State ──────────────────────────────────────────────
   AuthStatus _status = AuthStatus.initial;
-  User? _firebaseUser;
   String? _backendToken;
   String? _errorMessage;
-
-  // Kredensial sementara — hanya ada di memory, dipakai untuk re-login
-  // setelah user klik "Ya sudah konfirmasi" di VerifyEmailPage
-  String? _tempEmail;
-  String? _tempPassword;
+  String? _userName;
+  String? _userEmail;
 
   // ─── Getters ────────────────────────────────────────────
   AuthStatus get status => _status;
-  User? get firebaseUser => _firebaseUser;
   String? get backendToken => _backendToken;
   String? get errorMessage => _errorMessage;
   bool get isLoading => _status == AuthStatus.loading;
+  String? get userName => _userName;
+  String? get userEmail => _userEmail;
 
-  // ─── Register dengan Email & Password ───────────────────
+  // ─── Init: Restore token dari secure storage ────────────
+  Future<void> init() async {
+    debugPrint('[AUTH] init() — checking stored token...');
+    try {
+      final token = await SecureStorageService.getToken();
+      if (token != null && token.isNotEmpty) {
+        _backendToken = token;
+        _status = AuthStatus.authenticated;
+        debugPrint('[AUTH] Token ditemukan → status=authenticated');
+        notifyListeners();
+      } else {
+        _status = AuthStatus.unauthenticated;
+        debugPrint('[AUTH] Tidak ada token → status=unauthenticated');
+      }
+    } catch (e) {
+      debugPrint('[AUTH] Error reading token: $e');
+      _status = AuthStatus.unauthenticated;
+    }
+  }
+
+  // ─── Register dengan Email & Password (langsung ke backend) ───
   Future<bool> register({
     required String name,
     required String email,
     required String password,
   }) async {
     _setLoading();
-    debugPrint('┌─────────────────────────────────────────────');
-    debugPrint('│ [FIREBASE REQUEST] createUserWithEmailAndPassword');
-    debugPrint('│ Email : $email');
-    debugPrint('│ Name  : $name');
-    debugPrint('└─────────────────────────────────────────────');
     try {
-      final credential = await _auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
+      final response = await DioClient.instance.post(
+        ApiConstants.emailRegister,
+        data: {'name': name, 'email': email, 'password': password},
       );
-      _firebaseUser = credential.user;
-      debugPrint('┌─────────────────────────────────────────────');
-      debugPrint('│ [FIREBASE RESPONSE] Register berhasil');
-      debugPrint('│ UID   : ${_firebaseUser?.uid}');
-      debugPrint('│ Email : ${_firebaseUser?.email}');
-      debugPrint('└─────────────────────────────────────────────');
 
-      // Update display name di Firebase
-      debugPrint('[FIREBASE] updateDisplayName → $name');
-      await _firebaseUser?.updateDisplayName(name);
+      final data = response.data['data'] as Map<String, dynamic>;
+      final backendToken = data['access_token'] as String;
+      _backendToken = backendToken;
+      _userName = name;
+      _userEmail = email;
 
-      // Kirim email verifikasi
-      debugPrint('[FIREBASE] sendEmailVerification → ${_firebaseUser?.email}');
-      await _firebaseUser?.sendEmailVerification();
-      debugPrint('[FIREBASE] Email verifikasi terkirim');
-
-      // Simpan sementara di memory untuk re-login setelah verifikasi
-      _tempEmail = email;
-      _tempPassword = password;
+      await SecureStorageService.saveToken(backendToken);
 
       _status = AuthStatus.emailNotVerified;
       notifyListeners();
+
+      NotificationService.updateFcmToken();
       return true;
-    } on FirebaseAuthException catch (e) {
-      debugPrint('┌─────────────────────────────────────────────');
-      debugPrint('│ [FIREBASE ERROR] Register gagal');
-      debugPrint('│ Code   : ${e.code}');
-      debugPrint('│ Message: ${e.message}');
-      debugPrint('└─────────────────────────────────────────────');
-      _setError(_mapFirebaseError(e.code));
+    } catch (e) {
+      debugPrint('[AUTH] Register gagal: $e');
+      _setError(_extractErrorMessage(e));
       return false;
     }
   }
 
-  // ─── Login dengan Email & Password ──────────────────────
+  // ─── Login dengan Email & Password (langsung ke backend) ───
   Future<bool> loginWithEmail({required String email, required String password}) async {
     _setLoading();
-    debugPrint('┌─────────────────────────────────────────────');
-    debugPrint('│ [FIREBASE REQUEST] signInWithEmailAndPassword');
-    debugPrint('│ Email : $email');
-    debugPrint('└─────────────────────────────────────────────');
     try {
-      final credential = await _auth.signInWithEmailAndPassword(email: email, password: password);
-      _firebaseUser = credential.user;
-      debugPrint('┌─────────────────────────────────────────────');
-      debugPrint('│ [FIREBASE RESPONSE] Login berhasil');
-      debugPrint('│ UID           : ${_firebaseUser?.uid}');
-      debugPrint('│ Email         : ${_firebaseUser?.email}');
-      debugPrint('│ EmailVerified : ${_firebaseUser?.emailVerified}');
-      debugPrint('└─────────────────────────────────────────────');
+      final response = await DioClient.instance.post(
+        ApiConstants.emailLogin,
+        data: {'email': email, 'password': password},
+      );
 
-      // Cek apakah email sudah diverifikasi
-      if (!(_firebaseUser?.emailVerified ?? false)) {
-        debugPrint('[FIREBASE] Email belum diverifikasi → redirect verify page');
-        _status = AuthStatus.emailNotVerified;
-        notifyListeners();
-        return false;
-      }
+      final data = response.data['data'] as Map<String, dynamic>;
+      final backendToken = data['access_token'] as String;
+      final userData = data['user'] as Map<String, dynamic>;
+      _backendToken = backendToken;
+      _userName = userData['name'] as String?;
+      _userEmail = userData['email'] as String?;
 
-      return await _verifyTokenToBackend();
-    } on FirebaseAuthException catch (e) {
-      debugPrint('┌─────────────────────────────────────────────');
-      debugPrint('│ [FIREBASE ERROR] Login gagal');
-      debugPrint('│ Code   : ${e.code}');
-      debugPrint('│ Message: ${e.message}');
-      debugPrint('└─────────────────────────────────────────────');
-      _setError(_mapFirebaseError(e.code));
+      await SecureStorageService.saveToken(backendToken);
+
+      _status = AuthStatus.authenticated;
+      notifyListeners();
+
+      NotificationService.updateFcmToken();
+      return true;
+    } catch (e) {
+      debugPrint('[AUTH] Login gagal: $e');
+      _setError(_extractErrorMessage(e));
       return false;
     }
   }
@@ -121,56 +113,25 @@ class AuthProvider extends ChangeNotifier {
   // ─── Login dengan Google ─────────────────────────────────
   Future<bool> loginWithGoogle() async {
     _setLoading();
-    debugPrint('┌─────────────────────────────────────────────');
-    debugPrint('│ [FIREBASE REQUEST] Google Sign-In');
-    debugPrint('└─────────────────────────────────────────────');
     try {
       final googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
-        debugPrint('[FIREBASE]  Google Sign-In dibatalkan user');
         _setError('Login Google dibatalkan');
         return false;
       }
-      debugPrint('[FIREBASE] Google account dipilih: ${googleUser.email}');
 
       final googleAuth = await googleUser.authentication;
-      debugPrint('[FIREBASE] Google auth token diperoleh');
-
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
       final userCred = await _auth.signInWithCredential(credential);
-      _firebaseUser = userCred.user;
-      debugPrint('┌─────────────────────────────────────────────');
-      debugPrint('│ [FIREBASE RESPONSE] Google Login berhasil');
-      debugPrint('│ UID           : ${_firebaseUser?.uid}');
-      debugPrint('│ Email         : ${_firebaseUser?.email}');
-      debugPrint('│ DisplayName   : ${_firebaseUser?.displayName}');
-      debugPrint('│ EmailVerified : ${_firebaseUser?.emailVerified}');
-      debugPrint('└─────────────────────────────────────────────');
+      final firebaseUser = userCred.user;
 
-      return await _verifyTokenToBackend();
-    } catch (e) {
-      debugPrint('┌─────────────────────────────────────────────');
-      debugPrint('│ [FIREBASE ERROR] Google Sign-In gagal');
-      debugPrint('│ Error: $e');
-      debugPrint('└─────────────────────────────────────────────');
-      _setError('Gagal login dengan Google: $e');
-      return false;
-    }
-  }
-
-  // ─── Kirim Firebase Token ke Backend ────────────────────
-  Future<bool> _verifyTokenToBackend() async {
-    try {
-      debugPrint('[FIREBASE] Mengambil ID Token dari Firebase...');
-      final firebaseToken = await _firebaseUser?.getIdToken();
+      final firebaseToken = await firebaseUser?.getIdToken();
       if (firebaseToken == null) throw Exception('Token Firebase null');
-      debugPrint('[FIREBASE] ID Token diperoleh (${firebaseToken.length} chars)');
 
-      // DioClient interceptor akan log request/response ke backend
       final response = await DioClient.instance.post(
         ApiConstants.verifyToken,
         data: {'firebase_token': firebaseToken},
@@ -181,118 +142,65 @@ class AuthProvider extends ChangeNotifier {
       _backendToken = backendToken;
 
       await SecureStorageService.saveToken(backendToken);
-      debugPrint('[AUTH] Backend JWT tersimpan di SecureStorage');
 
       _status = AuthStatus.authenticated;
       notifyListeners();
 
-      // Register FCM token to backend after successful auth
       NotificationService.updateFcmToken();
-
       return true;
     } catch (e) {
-      debugPrint('[AUTH] _verifyTokenToBackend gagal: $e');
-      _setError('Gagal verifikasi ke server: $e');
+      debugPrint('[AUTH] Google login gagal: $e');
+      _setError('Gagal login dengan Google');
       return false;
     }
   }
 
-  // ─── Login ulang otomatis setelah email terkonfirmasi ───
-  // Dipanggil saat user klik "Ya sudah konfirmasi" di VerifyEmailPage.
-  // Alur: reload → cek emailVerified → re-login → fresh token → verify-token backend
-  Future<bool> loginAfterEmailVerification() async {
-    _setLoading();
-
-    // Step 1: Reload user dari Firebase untuk dapat status emailVerified terbaru
-    debugPrint('[FIREBASE] Reload user untuk cek emailVerified...');
-    await _firebaseUser?.reload();
-    _firebaseUser = _auth.currentUser;
-    final verified = _firebaseUser?.emailVerified ?? false;
-    debugPrint('[FIREBASE] emailVerified = $verified');
-
-    if (!verified) {
-      debugPrint('[FIREBASE] Email belum dikonfirmasi');
-      _status = AuthStatus.emailNotVerified;
-      notifyListeners();
-      return false;
-    }
-
-    // Step 2: Re-login dengan kredensial tersimpan untuk mendapat fresh session
-    if (_tempEmail == null || _tempPassword == null) {
-      debugPrint('[AUTH] Kredensial tidak tersedia, pakai token lama');
-      return await _verifyTokenToBackend();
-    }
-
-    debugPrint('┌─────────────────────────────────────────────');
-    debugPrint('│ [FIREBASE REQUEST] Re-login setelah verifikasi');
-    debugPrint('│ Email : $_tempEmail');
-    debugPrint('└─────────────────────────────────────────────');
-
-    try {
-      final credential = await _auth.signInWithEmailAndPassword(
-        email: _tempEmail!,
-        password: _tempPassword!,
-      );
-      _firebaseUser = credential.user;
-      debugPrint('┌─────────────────────────────────────────────');
-      debugPrint('│ [FIREBASE RESPONSE] Re-login berhasil');
-      debugPrint('│ UID           : ${_firebaseUser?.uid}');
-      debugPrint('│ Email         : ${_firebaseUser?.email}');
-      debugPrint('│ EmailVerified : ${_firebaseUser?.emailVerified}');
-      debugPrint('└─────────────────────────────────────────────');
-
-      // Hapus kredensial sementara setelah dipakai
-      _tempEmail = null;
-      _tempPassword = null;
-
-      // Step 3: Kirim fresh Firebase token ke backend → dapat JWT
-      return await _verifyTokenToBackend();
-    } on FirebaseAuthException catch (e) {
-      debugPrint('┌─────────────────────────────────────────────');
-      debugPrint('│ [FIREBASE ERROR] Re-login gagal');
-      debugPrint('│ Code   : ${e.code}');
-      debugPrint('│ Message: ${e.message}');
-      debugPrint('└─────────────────────────────────────────────');
-      _setError(_mapFirebaseError(e.code));
-      return false;
-    }
-  }
-
-  // ─── Kirim ulang email verifikasi ───────────────────────
+  // ─── Resend verification email ──────────────────────────
   Future<void> resendVerificationEmail() async {
-    debugPrint('[FIREBASE] Resend verification email → ${_firebaseUser?.email}');
-    await _firebaseUser?.sendEmailVerification();
-    debugPrint('[FIREBASE] Email verifikasi dikirim ulang');
+    debugPrint('[AUTH] Resend verification email (backend OTP)');
+    // Kirim ulang OTP via backend
+    try {
+      await DioClient.instance.post(
+        '/otp/send-email',
+      );
+      debugPrint('[AUTH] OTP email dikirim ulang');
+    } catch (e) {
+      debugPrint('[AUTH] Gagal kirim ulang OTP: $e');
+    }
   }
 
-  // ─── Cek status verifikasi email (polling) ───────────────
-  Future<bool> checkEmailVerified() async {
-    debugPrint('[FIREBASE] Polling: reload user dari Firebase...');
-    await _firebaseUser?.reload();
-    _firebaseUser = _auth.currentUser;
-    final verified = _firebaseUser?.emailVerified ?? false;
-    debugPrint('[FIREBASE] emailVerified = $verified');
+  // ─── Setelah email terverifikasi ────────────────────────
+  Future<bool> loginAfterEmailVerification() async {
+    _status = AuthStatus.authenticated;
+    notifyListeners();
+    return true;
+  }
 
-    if (verified) {
-      debugPrint('[FIREBASE] Email sudah verified → lanjut ke backend');
-      return await _verifyTokenToBackend();
+  // ─── Verify OTP Email ───────────────────────────────────
+  Future<bool> verifyEmailOTP(String code) async {
+    try {
+      await DioClient.instance.post(
+        ApiConstants.verifyEmailOtp,
+        data: {'code': code},
+      );
+
+      _status = AuthStatus.authenticated;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('[AUTH] Verify OTP gagal: $e');
+      _setError(_extractErrorMessage(e));
+      return false;
     }
-    debugPrint('[FIREBASE] Email belum verified, polling lanjut...');
-    return false;
   }
 
   // ─── Logout ─────────────────────────────────────────────
   Future<void> logout() async {
-    debugPrint('[AUTH] Logout...');
     await _auth.signOut();
     await _googleSignIn.signOut();
     await SecureStorageService.clearAll();
-    _firebaseUser = null;
     _backendToken = null;
-    _tempEmail = null;
-    _tempPassword = null;
     _status = AuthStatus.unauthenticated;
-    debugPrint('[AUTH] Logout berhasil, token dihapus');
     notifyListeners();
   }
 
@@ -306,18 +214,17 @@ class AuthProvider extends ChangeNotifier {
   void _setError(String message) {
     _status = AuthStatus.error;
     _errorMessage = message;
-    debugPrint('[AUTH] Error: $message');
     notifyListeners();
   }
 
-  String _mapFirebaseError(String code) => switch (code) {
-    'email-already-in-use' => 'Email sudah terdaftar. Gunakan email lain.',
-    'user-not-found' => 'Akun tidak ditemukan. Silakan daftar.',
-    'wrong-password' => 'Password salah. Coba lagi.',
-    'invalid-credential' => 'Email atau password salah.',
-    'invalid-email' => 'Format email tidak valid.',
-    'weak-password' => 'Password terlalu lemah. Minimal 6 karakter.',
-    'network-request-failed' => 'Tidak ada koneksi internet.',
-    _ => 'Terjadi kesalahan. Coba lagi.',
-  };
+  String _extractErrorMessage(dynamic error) {
+    try {
+      // Dio error dengan response dari backend
+      if (error.toString().contains('message')) {
+        final match = RegExp(r'"message":"([^"]+)"').firstMatch(error.toString());
+        if (match != null) return match.group(1)!;
+      }
+    } catch (_) {}
+    return 'Terjadi kesalahan. Coba lagi.';
+  }
 }
