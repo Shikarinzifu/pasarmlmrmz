@@ -93,7 +93,7 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
-    final user = auth.firebaseUser;
+    final userEmail = auth.userEmail;
 
     return LoadingOverlay(
       isLoading: auth.isLoading,
@@ -131,7 +131,7 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
                       const Icon(Icons.email_outlined, color: Colors.grey),
                       const SizedBox(width: 12),
                       Text(
-                        user?.email ?? '-',
+                        userEmail ?? '-',
                         style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
