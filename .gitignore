@@ -1,2 +1,69 @@
+# Flutter/Dart
+.dart_tool/
+.flutter-plugins-dependencies
+.packages
+pubspec.lock
+.flutter-plugins
 
-.vscode/templates
+# Android
+android/.gradle/
+android/app/debug/
+android/app/profile/
+android/app/release/
+android/local.properties
+android/key.properties
+*.jks
+*.keystore
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Runner.xcworkspace/xcshareddata/
+ios/Flutter/Generated.xcconfig
+ios/Flutter/app.flx
+ios/Flutter/app.zip
+ios/Flutter/flutter_assets/
+ios/Flutter/flutter_export_environment.sh
+
+# macOS
+macos/Pods/
+macos/Flutter/GeneratedPluginRegistrant.swift
+
+# Linux
+linux/flutter/ephemeral/
+linux/flutter/CMakeCache.txt
+linux/flutter/CMakeFiles/
+
+# Windows
+windows/flutter/ephemeral/
+windows/flutter/CMakeCache.txt
+windows/flutter/CMakeFiles/
+
+# Web
+web/favicon.png
+
+# IDE
+.vscode/
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Build
+build/
+build/
+
+# Misc
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+
+# Firebase
+firebase_options.dart
