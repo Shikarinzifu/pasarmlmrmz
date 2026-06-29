@@ -1,10 +1,12 @@
 class ApiConstants {
   // Ganti dengan URL backend kamu
-  static const String baseUrl = 'http://192.168.0.5:8085/v1';
+  static const String baseUrl = 'http://192.168.110.67:8080/v1';
 
   // Auth endpoints
   static const String verifyToken = '/auth/verify-token';
-  static const String refreshToken = '/auth/refresh';
+  static const String emailRegister = '/auth/email/register';
+  static const String emailLogin = '/auth/email/login';
+  static const String verifyEmailOtp = '/auth/verify-email-otp';
   static const String fcmToken = '/auth/fcm-token';
 
   // Product endpoints
