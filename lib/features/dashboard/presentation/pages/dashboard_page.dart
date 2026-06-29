@@ -1022,17 +1022,17 @@ class _AccountDialog extends StatelessWidget {
             radius: 30,
             backgroundColor: const Color(0xFF1565C0),
             child: Text(
-              (auth.firebaseUser?.displayName ?? 'U')[0].toUpperCase(),
+              (auth.userName ?? 'U')[0].toUpperCase(),
               style: const TextStyle(fontSize: 24, color: Colors.white),
             ),
           ),
           const SizedBox(height: 12),
           Text(
-            auth.firebaseUser?.displayName ?? 'User',
+            auth.userName ?? 'User',
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
           Text(
-            auth.firebaseUser?.email ?? '',
+            auth.userEmail ?? '',
             style: const TextStyle(color: Colors.grey, fontSize: 13),
           ),
           const SizedBox(height: 20),
