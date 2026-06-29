@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/pasar_malam.iml" filepath="$PROJECT_DIR$/pasar_malam.iml" />
+      <module fileurl="file://$PROJECT_DIR$/android/pasar_malam_android.iml" filepath="$PROJECT_DIR$/android/pasar_malam_android.iml" />
+    </modules>
+  </component>
+</project>
