@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:pasar_malam/core/services/secure_storage.dart';
 import 'package:pasar_malam/features/auth/presentation/pages/login_page.dart';
 import 'package:pasar_malam/features/auth/presentation/pages/register_page.dart';
 import 'package:pasar_malam/features/auth/presentation/pages/verify_email_page.dart';
@@ -84,9 +83,11 @@ class _SplashPageState extends State<SplashPage> {
     await Future.delayed(const Duration(seconds: 2));
     if (!mounted) return;
 
-    final token = await SecureStorageService.getToken();
-    if (!mounted) return;
-    final route = token != null ? AppRouter.dashboard : AppRouter.login;
+    // Token sudah di-restore oleh AuthProvider.init() di main()
+    final authStatus = context.read<AuthProvider>().status;
+    final route = (authStatus == AuthStatus.authenticated)
+        ? AppRouter.dashboard
+        : AppRouter.login;
     Navigator.pushReplacementNamed(context, route);
   }
 
